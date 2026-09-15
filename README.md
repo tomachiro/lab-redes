@@ -1,17 +1,15 @@
-# lab_red
+# LabRed 
 
-A new Flutter project.
+Aplicación social desarrollada con Flutter y Firebase.
 
-## Getting Started
+## Características
+* Feed interactivo con publicaciones, likes y comentarios.
+* Mensajería directa en tiempo real.
+* Perfiles interactivos con contadores de seguidores/seguidos.
+* Soporte de temas (Claro, Oscuro y Cálido).
 
-This project is a starting point for a Flutter application.
+## Configuración Local
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. Clona el repositorio:
+   ```bash
+   git clone [https://github.com/tu-usuario/lab_red.git](https://github.com/tu-usuario/lab_red.git)

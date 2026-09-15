@@ -1,0 +1,13 @@
+// Copia este archivo como firebase_options.dart e ingresa tus claves de Firebase Console
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    return const FirebaseOptions(
+      apiKey: 'TU_API_KEY_AQUI',
+      appId: 'TU_APP_ID_AQUI',
+      messagingSenderId: 'TU_SENDER_ID',
+      projectId: 'tu-proyecto-id',
+    );
+  }
+}
