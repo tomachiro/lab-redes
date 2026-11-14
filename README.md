@@ -3,7 +3,7 @@
 Aplicación social desarrollada con Flutter y Firebase.
 
 ## Características
-* Feed interactivo con publicaciones, likes y comentarios.
+* Feed interactivo con publicaciones, likes y comenbtarios.
 * Mensajería directa en tiempo real.
 * Perfiles interactivos con contadores de seguidores/seguidos.
 * Soporte de temas (Claro, Oscuro y Cálido).

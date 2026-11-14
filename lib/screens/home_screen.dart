@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../models/app_models.dart';
+import '../services/streak_service.dart';
 import '../utils/app_strings.dart';
 import 'direct_chats_screen.dart';
 import 'user_search_screen.dart';
+import '../widgets/app_logo.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -22,21 +26,73 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+Timer? _countdownTimer;
   int _currentIndex = 0;
-  bool _isStoriesOpen = false;
+  final bool _isStoriesOpen = false;
   String? _selectedHashtag;
+  String _feedFilter = 'all'; // 'all', 'workout', 'food'
   StreamSubscription? _messageSubscription;
   bool _hasUnreadMessages = false;
 
+  late final DateTime _sessionStartTime;
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+
   @override
-  void initState() {
-    super.initState();
+void initState() {
+super.initState();
+_countdownTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+if (mounted) setState(() {});
+});
+    _sessionStartTime = DateTime.now();
+    _initLocalNotifications();
     _listenForNewMessages();
+  }
+
+  Future<void> _initLocalNotifications() async {
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+    const darwinSettings = DarwinInitializationSettings();
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: darwinSettings,
+      linux: LinuxInitializationSettings(defaultActionName: 'Abrir'),
+    );
+
+    await _localNotifications.initialize(settings: initSettings);
+
+    // Solicitar permiso en Android 13+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
+  }
+
+  Future<void> _showSystemNotification(String sender, String msg) async {
+    const androidDetails = AndroidNotificationDetails(
+      'gymbook_messages',
+      AppStrings.directMessagesTitle,
+      channelDescription: AppStrings.notifChannelDesc,
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    const details = NotificationDetails(android: androidDetails);
+
+    await _localNotifications.show(
+id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+title: AppStrings.newMessageTitle(sender),
+body: msg,
+notificationDetails: details,
+);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _countdownTimer?.cancel();
     _messageSubscription?.cancel();
     super.dispose();
   }
@@ -47,45 +103,65 @@ class _HomeScreenState extends State<HomeScreen> {
     _messageSubscription = FirebaseFirestore.instance
         .collectionGroup('messages')
         .where('receiverId', isEqualTo: widget.currentUserId)
-        .limit(1)
         .snapshots()
         .listen((snapshot) {
-          if (snapshot.docChanges.isNotEmpty) {
-            for (var change in snapshot.docChanges) {
-              if (change.type == DocumentChangeType.added) {
-                final data = change.doc.data();
-                if (data != null) {
-                  final sender = data['senderId'] ?? AppStrings.anonymousUser;
-                  final msg = data['message'] ?? '';
+          for (var change in snapshot.docChanges) {
+            if (change.type == DocumentChangeType.added) {
+              final data = change.doc.data();
+              if (data == null) continue;
 
-                  setState(() {
-                    _hasUnreadMessages = true;
-                  });
+              // Ignorar mensajes previos a abrir la sesión actual
+              final ts = data['timestamp'] as Timestamp?;
+              if (ts != null && ts.toDate().isBefore(_sessionStartTime)) {
+                continue;
+              }
 
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      duration: const Duration(milliseconds: 2500),
-                      content: Row(
-                        children: [
-                          const Icon(
-                            Icons.mark_chat_unread,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '${AppStrings.newMessageFrom} $sender: "$msg"',
-                            ),
-                          ),
-                        ],
-                      ),
-                      backgroundColor: Colors.blueAccent,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+              final sender = data['senderId'] ?? AppStrings.anonymousUser;
+              final msg = data['message'] ?? '';
+
+              // Mostrar notificación del sistema
+              _showSystemNotification(sender, msg);
+
+              if (!mounted) return;
+              setState(() {
+                if (_currentIndex != 1) {
+                  _hasUnreadMessages = true;
                 }
+              });
+
+              // Alerta visual dentro de la app si no está en la pestaña de mensajes
+              if (_currentIndex != 1) {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    duration: const Duration(seconds: 3),
+                    content: Row(
+                      children: [
+                        const Icon(Icons.mark_chat_unread, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${AppStrings.newMessageFrom} $sender: "$msg"',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: Colors.blueAccent,
+                    behavior: SnackBarBehavior.floating,
+                    action: SnackBarAction(
+                      label: 'Ver',
+                      textColor: Colors.white,
+                      onPressed: () {
+                        setState(() {
+                          _currentIndex = 1;
+                          _hasUnreadMessages = false;
+                        });
+                      },
+                    ),
+                  ),
+                );
               }
             }
           }
@@ -93,10 +169,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showCreateOrEditPostDialog({String? postId, String? initialText}) {
+if (widget.isAnonymous) {
+ScaffoldMessenger.of(context).showSnackBar(
+const SnackBar(
+content: Text(AppStrings.anonCannotPost),
+),
+);
+return;
+}
     final contentController = TextEditingController(text: initialText);
     final mediaUrlController = TextEditingController();
-    bool isStory = false;
+    final durationController = TextEditingController();
+    final caloriesController = TextEditingController();
+    int? tempHours; // null = permanente
     String mediaType = 'image';
+    String category = 'workout'; // 'workout' o 'food'
+    String selectedRoutine = AppStrings.routineWeights;
+    bool isHealthyDiet = true;
 
     showDialog(
       context: context,
@@ -106,28 +195,145 @@ class _HomeScreenState extends State<HomeScreen> {
             String dialogTitle;
             if (postId != null) {
               dialogTitle = AppStrings.editPostTitle;
-            } else if (isStory) {
-              dialogTitle = AppStrings.newStoryTitle;
             } else {
               dialogTitle = AppStrings.newPostTitle;
             }
+
+            // Cálculo previo de calorías estimadas en vivo para mostrarlo como hint
+            final parsedMins =
+                int.tryParse(durationController.text.trim()) ?? 0;
+            final estimatedKcal = FitnessCalorieHelper.estimateBurnedCalories(
+              selectedRoutine,
+              parsedMins,
+            );
 
             return AlertDialog(
               title: Text(dialogTitle),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (postId == null) ...[
+                      const Text(
+                        AppStrings.postCategoryTitle,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'workout',
+                            label: Text(AppStrings.workoutTabLabel),
+                            icon: Icon(Icons.fitness_center),
+                          ),
+                          ButtonSegment(
+                            value: 'food',
+                            label: Text(AppStrings.foodTabLabel),
+                            icon: Icon(Icons.restaurant),
+                          ),
+                        ],
+                        selected: {category},
+                        onSelectionChanged: (newSelection) {
+                          setStateDialog(() {
+                            category = newSelection.first;
+                            caloriesController.clear();
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     TextField(
                       controller: contentController,
                       maxLines: 3,
                       decoration: InputDecoration(
-                        hintText: isStory
-                            ? AppStrings.storyHint
-                            : AppStrings.postHint,
+                        hintText: category == 'workout'
+                                  ? AppStrings.workoutContentHint
+                                  : AppStrings.foodContentHint,
                         border: const OutlineInputBorder(),
                       ),
                     ),
+                    if (postId == null) ...[
+                      const SizedBox(height: 12),
+                      if (category == 'workout') ...[
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedRoutine,
+                          decoration: const InputDecoration(
+                            labelText: AppStrings.activeRoutineLabel,
+                            border: OutlineInputBorder(),
+                          ),
+                          items: FitnessCalorieHelper.kcalPerMinute.keys
+                              .map(
+                                (type) => DropdownMenuItem(
+                                  value: type,
+                                  child: Text(type),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setStateDialog(() => selectedRoutine = val);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: durationController,
+                                keyboardType: TextInputType.number,
+                                onChanged: (_) => setStateDialog(() {}),
+                                decoration: const InputDecoration(
+                                  labelText: AppStrings.durationMinsLabel,
+                                  hintText: AppStrings.durationMinsHint,
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: caloriesController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: AppStrings.burnedKcalLabel,
+                                  hintText: parsedMins > 0
+                                      ? 'Auto: ~$estimatedKcal'
+                                      : AppStrings.kcalAutoEmptyHint,
+                                  border: const OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        TextField(
+                          controller: caloriesController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText:
+                                AppStrings.foodCaloriesLabel,
+                            hintText: AppStrings.foodCaloriesHint,
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            AppStrings.healthyDietSwitchLabel,
+                            style: TextStyle(fontSize: 13),
+                          ),
+                          value: isHealthyDiet,
+                          onChanged: (val) =>
+                              setStateDialog(() => isHealthyDiet = val),
+                        ),
+                      ],
+                    ],
                     if (postId == null) ...[
                       const SizedBox(height: 12),
                       TextField(
@@ -155,20 +361,40 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
-                      if (!widget.isAnonymous) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: isStory,
-                              onChanged: (val) {
-                                setStateDialog(() => isStory = val ?? false);
-                              },
-                            ),
-                            const Text(AppStrings.publishAsStory),
-                          ],
-                        ),
-                      ],
+                                            if (!widget.isAnonymous) ...[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int?>(
+                          initialValue: tempHours,
+                          decoration: const InputDecoration(
+                            labelText: AppStrings.tempPostLabel,
+prefixIcon: Icon(Icons.timer_outlined),
+),
+items: const [
+DropdownMenuItem<int?>(
+value: null,
+child: Text(AppStrings.tempPostPermanent),
+),
+DropdownMenuItem<int?>(
+value: 1,
+child: Text(AppStrings.tempPost1h),
+),
+DropdownMenuItem<int?>(
+value: 6,
+child: Text(AppStrings.tempPost6h),
+),
+DropdownMenuItem<int?>(
+value: 12,
+child: Text(AppStrings.tempPost12h),
+),
+DropdownMenuItem<int?>(
+value: 24,
+child: Text(AppStrings.tempPost24h),
+),
+],
+onChanged: (val) =>
+setStateDialog(() => tempHours = val),
+),
+],
                     ],
                   ],
                 ),
@@ -191,19 +417,64 @@ class _HomeScreenState extends State<HomeScreen> {
                           .doc(postId)
                           .update({'content': text});
                     } else {
-                      final collection = isStory ? 'stories' : 'posts';
+                      const collection = 'posts';
                       final mediaUrl = mediaUrlController.text.trim();
+
+                      int? finalCalories = int.tryParse(
+                        caloriesController.text.trim(),
+                      );
+                      final int? duration = int.tryParse(
+                        durationController.text.trim(),
+                      );
+
+                      // Si es rutina y no puso calorías pero sí tiempo (o por defecto 30 min), calcular aprox.
+                      if (category == 'workout' &&
+                          finalCalories == null) {
+                        final minsToCalc = (duration != null && duration > 0)
+                            ? duration
+                            : 30;
+                        finalCalories =
+                            FitnessCalorieHelper.estimateBurnedCalories(
+                              selectedRoutine,
+                              minsToCalc,
+                            );
+                      }
 
                       await FirebaseFirestore.instance
                           .collection(collection)
                           .add({
                             'author': widget.currentUserId,
                             'content': text,
+                            'category': category,
+                            'routineType': category == 'workout'
+                                ? selectedRoutine
+                                : null,
+                            'durationMinutes': category == 'workout'
+                                ? duration
+                                : null,
+                            'calories': finalCalories,
+                            'isHealthyDiet': category == 'food'
+                                ? isHealthyDiet
+                                : null,
                             'mediaUrl': mediaUrl.isNotEmpty ? mediaUrl : null,
                             'mediaType': mediaUrl.isNotEmpty ? mediaType : null,
                             'likes': [],
-                            'createdAt': FieldValue.serverTimestamp(),
+'createdAt': FieldValue.serverTimestamp(),
+                            'expiresAt': ((tempHours ?? 0) > 0)
+? Timestamp.fromDate(
+DateTime.now().add(Duration(hours: tempHours ?? 0)),
+)
+: null,
                           });
+
+                      // Actualizar racha diaria (Ejercicio o Dieta) si es un post normal
+                      if (!widget.isAnonymous) {
+                        await StreakService.registerActivity(
+                          username: widget.currentUserId,
+                          category: category,
+                          isHealthyDiet: isHealthyDiet,
+                        );
+                      }
                     }
 
                     nav.pop();
@@ -334,6 +605,65 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildFitnessBadges(Map<String, dynamic> postData) {
+    final category = postData['category'] ?? 'workout';
+    final routineType = postData['routineType'];
+    final duration = postData['durationMinutes'];
+    final calories = postData['calories'];
+    final isHealthy = postData['isHealthyDiet'] ?? true;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          Chip(
+            avatar: Icon(
+              category == 'food' ? Icons.restaurant : Icons.fitness_center,
+              size: 16,
+              color: Colors.white,
+            ),
+            label: Text(
+              category == 'food'
+                  ? (isHealthy ? AppStrings.healthyFoodBadge : AppStrings.freeFoodBadge)
+                  : (routineType ?? 'Ejercicio'),
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+            backgroundColor: category == 'food'
+                ? (isHealthy ? Colors.green : Colors.orange)
+                : Colors.deepPurple,
+            visualDensity: VisualDensity.compact,
+          ),
+          if (duration != null && duration > 0)
+            Chip(
+              avatar: const Icon(Icons.timer, size: 16),
+              label: Text(
+                '$duration min',
+                style: const TextStyle(fontSize: 12),
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+          if (calories != null && calories > 0)
+            Chip(
+              avatar: const Icon(
+                Icons.local_fire_department,
+                size: 16,
+                color: Colors.deepOrange,
+              ),
+              label: Text(
+                category == 'food'
+                    ? '$calories kcal'
+                    : '~$calories kcal quemadas',
+                style: const TextStyle(fontSize: 12),
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFeedView() {
     return Stack(
       children: [
@@ -425,6 +755,42 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: Column(
                 children: [
+                  // Barra de filtro rápido entre Todo / Ejercicio / Comida
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 64,
+                      right: 12,
+                      top: 10,
+                      bottom: 4,
+                    ),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Todo'),
+                            selected: _feedFilter == 'all',
+                            onSelected: (_) =>
+                                setState(() => _feedFilter = 'all'),
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: const Text('Ejercicios'),
+                            selected: _feedFilter == 'workout',
+                            onSelected: (_) =>
+                                setState(() => _feedFilter = 'workout'),
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: const Text('Comidas'),
+                            selected: _feedFilter == 'food',
+                            onSelected: (_) =>
+                                setState(() => _feedFilter = 'food'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   if (_selectedHashtag != null)
                     Container(
                       color: Colors.amber.shade100,
@@ -458,7 +824,27 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
 
-                        var posts = snapshot.data?.docs ?? [];
+                        var posts = (snapshot.data?.docs ?? []).where((doc) {
+final data = doc.data() as Map<String, dynamic>;
+final exp = (data['expiresAt'] as Timestamp?)?.toDate();
+if (exp != null && exp.isBefore(DateTime.now())) {
+if (data['author'] == widget.currentUserId) {
+doc.reference.delete();
+}
+return false;
+}
+return true;
+}).toList();
+
+                        if (_feedFilter != 'all') {
+                          posts = posts.where((doc) {
+                            final cat =
+                                (doc.data()
+                                    as Map<String, dynamic>)['category'] ??
+                                'workout';
+                            return cat == _feedFilter;
+                          }).toList();
+                        }
 
                         if (_selectedHashtag != null) {
                           posts = posts.where((doc) {
@@ -477,7 +863,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         }
 
                         return ListView.builder(
-                          padding: const EdgeInsets.only(top: 60),
+                          padding: const EdgeInsets.only(top: 8, bottom: 80),
                           itemCount: posts.length,
                           itemBuilder: (context, index) {
                             final doc = posts[index];
@@ -552,6 +938,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           )
                                         : null,
                                   ),
+                                  _buildFitnessBadges(postData),
                                   if (content.isNotEmpty)
                                     Padding(
                                       padding: const EdgeInsets.symmetric(
@@ -651,21 +1038,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        if (!widget.isAnonymous)
-          Positioned(
-            top: 12,
-            left: 12,
-            child: FloatingActionButton.small(
-              heroTag: 'logoBtn',
-              backgroundColor: Colors.black,
-              onPressed: () {
-                setState(() {
-                  _isStoriesOpen = !_isStoriesOpen;
-                });
-              },
-              child: const Icon(Icons.blur_on, color: Colors.white),
-            ),
-          ),
       ],
     );
   }
@@ -684,9 +1056,17 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text(AppStrings.appName)),
-      body: pages[_currentIndex],
-      floatingActionButton: _currentIndex == 0
+      appBar: AppBar(
+title: const Row(
+children: [
+AppLogo(size: 28, borderRadius: 6),
+SizedBox(width: 8),
+Text(AppStrings.appName),
+],
+),
+),
+body: pages[_currentIndex],
+      floatingActionButton: (_currentIndex == 0 && !widget.isAnonymous)
           ? FloatingActionButton(
               onPressed: () => _showCreateOrEditPostDialog(),
               child: const Icon(Icons.add),

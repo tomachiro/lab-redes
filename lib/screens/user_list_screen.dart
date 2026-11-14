@@ -1,3 +1,4 @@
+import '../utils/app_strings.dart';
 import 'package:flutter/material.dart';
 
 import 'profile_screen.dart';
@@ -19,7 +20,7 @@ class UserListScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: userIds.isEmpty
-          ? const Center(child: Text('Lista vacía'))
+          ? const Center(child: Text(AppStrings.emptyListText))
           : ListView.builder(
               itemCount: userIds.length,
               itemBuilder: (context, index) {

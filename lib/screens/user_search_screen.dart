@@ -133,7 +133,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
 
   Widget _buildHistoryView() {
     if (_searchHistory.isEmpty) {
-      return const Center(child: Text('Escribe para buscar usuarios'));
+      return const Center(child: Text(AppStrings.typeToSearchUsers));
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +149,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
               ),
               TextButton(
                 onPressed: _clearHistory,
-                child: const Text('Borrar todo'),
+                child: const Text(AppStrings.clearAllBtn),
               ),
             ],
           ),

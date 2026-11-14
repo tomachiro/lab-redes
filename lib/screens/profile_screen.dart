@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/streak_service.dart';
 import '../utils/app_strings.dart';
 import '../main.dart';
 import 'login_screen.dart';
@@ -40,7 +41,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    final savedTheme = prefs.getString('theme_mode');
+await prefs.clear();
+if (savedTheme != null) {
+await prefs.setString('theme_mode', savedTheme);
+}
 
     if (!mounted) return;
     Navigator.pushReplacement(
@@ -115,11 +120,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   await FirebaseFirestore.instance
                       .collection('users')
-                      .doc(uid)
+                      .doc(newUsername)
                       .set({
+                        'uid': uid,
                         'username': newUsername,
                         'email': email,
                         'isAnonymous': false,
+                        'workoutStreak': 0,
+                        'dietStreak': 0,
                       }, SetOptions(merge: true));
 
                   final prefs = await SharedPreferences.getInstance();
@@ -192,18 +200,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                final uid = FirebaseAuth.instance.currentUser?.uid;
                 final nav = Navigator.of(dialogContext);
 
-                if (uid != null) {
-                  await FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(uid)
-                      .set({
-                        'bio': _bioController.text.trim(),
-                        'avatarUrl': _avatarUrlController.text.trim(),
-                      }, SetOptions(merge: true));
-                }
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(widget.currentUserId)
+                    .set({
+                      'username': widget.currentUserId,
+                      'bio': _bioController.text.trim(),
+                      'avatarUrl': _avatarUrlController.text.trim(),
+                    }, SetOptions(merge: true));
 
                 nav.pop();
               },
@@ -385,6 +391,138 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildStreakCards(int workoutStreak, int dietStreak) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Card(
+              color: Colors.deepOrange.withValues(alpha: 0.12),
+              elevation: 0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 8,
+                ),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.local_fire_department,
+                      color: Colors.deepOrange,
+                      size: 26,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$workoutStreak días',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const Text(
+                      AppStrings.workoutStreakTitle,
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Card(
+              color: Colors.green.withValues(alpha: 0.12),
+              elevation: 0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 8,
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.eco, color: Colors.green, size: 26),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$dietStreak días',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const Text(
+                      AppStrings.dietStreakTitle,
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostBadges(Map<String, dynamic> post) {
+    final category = post['category'] ?? 'workout';
+    final routineType = post['routineType'];
+    final duration = post['durationMinutes'];
+    final calories = post['calories'];
+    final isHealthy = post['isHealthyDiet'] ?? true;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          Chip(
+            avatar: Icon(
+              category == 'food' ? Icons.restaurant : Icons.fitness_center,
+              size: 16,
+              color: Colors.white,
+            ),
+            label: Text(
+              category == 'food'
+                  ? (isHealthy ? AppStrings.healthyFoodBadge : AppStrings.freeFoodBadge)
+                  : (routineType ?? 'Ejercicio'),
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+            backgroundColor: category == 'food'
+                ? (isHealthy ? Colors.green : Colors.orange)
+                : Colors.deepPurple,
+            visualDensity: VisualDensity.compact,
+          ),
+          if (duration != null && duration > 0)
+            Chip(
+              avatar: const Icon(Icons.timer, size: 16),
+              label: Text(
+                '$duration min',
+                style: const TextStyle(fontSize: 12),
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+          if (calories != null && calories > 0)
+            Chip(
+              avatar: const Icon(
+                Icons.local_fire_department,
+                size: 16,
+                color: Colors.deepOrange,
+              ),
+              label: Text(
+                category == 'food'
+                    ? '$calories kcal'
+                    : '~$calories kcal quemadas',
+                style: const TextStyle(fontSize: 12),
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAnonUser = FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
@@ -412,7 +550,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: [
                         Icon(Icons.upgrade, color: Colors.blue),
                         SizedBox(width: 8),
-                        Text('Vincular Cuenta'),
+                        Text(AppStrings.linkAccountBtn),
                       ],
                     ),
                   ),
@@ -446,6 +584,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           final followers = List<String>.from(userData['followers'] ?? []);
           final following = List<String>.from(userData['following'] ?? []);
           final isFollowing = followers.contains(widget.currentUserId);
+
+          final workoutStreak = StreakService.getEffectiveStreak(
+            userData,
+            'workout',
+          );
+          final dietStreak = StreakService.getEffectiveStreak(userData, 'food');
 
           return StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
@@ -492,7 +636,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         style: const TextStyle(fontStyle: FontStyle.italic),
                       ),
                     ),
-                  const SizedBox(height: 12),
+                  _buildStreakCards(workoutStreak, dietStreak),
+                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -659,6 +804,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ),
                                       ),
                                     ),
+                                    _buildPostBadges(post),
                                     if (content.isNotEmpty)
                                       Padding(
                                         padding: const EdgeInsets.symmetric(
