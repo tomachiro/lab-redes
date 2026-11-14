@@ -1,3 +1,5 @@
+import '../widgets/profile_fitness_section.dart';
+import '../utils/media_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -599,7 +601,8 @@ await prefs.setString('theme_mode', savedTheme);
             builder: (context, postsSnapshot) {
               final posts = postsSnapshot.data?.docs ?? [];
 
-              return Column(
+              return ListView(
+                padding: const EdgeInsets.only(bottom: 32),
                 children: [
                   const SizedBox(height: 16),
                   CircleAvatar(
@@ -637,6 +640,16 @@ await prefs.setString('theme_mode', savedTheme);
                       ),
                     ),
                   _buildStreakCards(workoutStreak, dietStreak),
+Padding(
+padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+child: ProfileFitnessSection(
+currentUserId: widget.currentUserId,
+targetUserId: targetUser,
+isMyProfile: isMyProfile,
+isAnonymous: userData['isAnonymous'] == true,
+userData: userData,
+),
+),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -765,11 +778,16 @@ await prefs.setString('theme_mode', savedTheme);
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Expanded(
-                    child: posts.isEmpty
-                        ? const Center(child: Text(AppStrings.noUserPosts))
-                        : ListView.builder(
-                            itemCount: posts.length,
+                  if (posts.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: Text(AppStrings.noUserPosts)),
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: posts.length,
                             itemBuilder: (context, index) {
                               final doc = posts[index];
                               final post = doc.data() as Map<String, dynamic>;
@@ -829,8 +847,8 @@ await prefs.setString('theme_mode', savedTheme);
                                                   Icons.play_circle,
                                                   size: 50,
                                                 )
-                                              : Image.network(
-                                                  mediaUrl,
+                                              : SmartPostImage(
+url:                                                   mediaUrl,
                                                   errorBuilder: (
                                                     context,
                                                     error,
@@ -877,7 +895,6 @@ await prefs.setString('theme_mode', savedTheme);
                               );
                             },
                           ),
-                  ),
                 ],
               );
             },

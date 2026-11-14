@@ -1,3 +1,4 @@
+import 'profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -167,6 +168,258 @@ partnerId: widget.isGroup ? null : widget.chatPartnerId,
 );
 }
 
+  void _openQuickTrainingDialog() {
+    final exCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.currentUserId)
+            .snapshots(),
+        builder: (context, snap) {
+          final data = (snap.data?.data() as Map<String, dynamic>?) ?? {};
+          final isTraining = data['isTraining'] == true;
+          final currentEx = (data['currentExercise'] ?? '').toString();
+          if (exCtrl.text.isEmpty && currentEx.isNotEmpty) {
+            exCtrl.text = currentEx;
+          }
+
+          return AlertDialog(
+            title: const Text(AppStrings.liveWorkoutTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    isTraining
+                        ? AppStrings.liveWorkoutActiveBadge
+                        : AppStrings.liveWorkoutTitle,
+                  ),
+                  value: isTraining,
+                  onChanged: (val) async {
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(widget.currentUserId)
+                        .set({
+                      'isTraining': val,
+                      'currentExercise': val ? exCtrl.text.trim() : '',
+                    }, SetOptions(merge: true));
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: exCtrl,
+                  decoration: const InputDecoration(
+                    labelText: AppStrings.currentExerciseLabel,
+                    hintText: AppStrings.currentExerciseHint,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(AppStrings.cancel),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final nav = Navigator.of(ctx);
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(widget.currentUserId)
+                      .set({
+                    'isTraining': true,
+                    'currentExercise': exCtrl.text.trim(),
+                  }, SetOptions(merge: true));
+                  nav.pop();
+                },
+                child: const Text(AppStrings.save),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showParticipantsActivitySheet(List<String> memberIds) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.68,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Icon(
+                      widget.isGroup ? Icons.groups_rounded : Icons.person_outline,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.isGroup
+                            ? '${AppStrings.groupParticipantsTitle} (${memberIds.length})'
+                            : AppStrings.chatActivitySummaryTitle,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: memberIds.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final memberId = memberIds[index];
+                    return StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(memberId)
+                          .snapshots(),
+                      builder: (context, snap) {
+                        final uData =
+                            (snap.data?.data() as Map<String, dynamic>?) ?? {};
+                        final isTraining = uData['isTraining'] == true;
+                        final curEx =
+                            (uData['currentExercise'] ?? '').toString();
+                        final wStreak = (uData['workoutStreak'] ?? 0) as int;
+                        final dStreak = (uData['dietStreak'] ?? 0) as int;
+                        final totalWorkouts =
+                            (uData['totalWorkouts'] ?? 0) as int;
+                        final totalKm =
+                            ((uData['totalKm'] ?? 0) as num).toDouble();
+                        final bio = (uData['bio'] ?? '').toString();
+
+                        return Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      child: Text(
+                                        memberId.isNotEmpty
+                                            ? memberId[0].toUpperCase()
+                                            : 'U',
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            memberId == widget.currentUserId
+                                                ? '$memberId (Tú)'
+                                                : memberId,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                          Text(
+                                            isTraining
+                                                ? (curEx.isNotEmpty
+                                                    ? '🟢 ${AppStrings.trainingNowLabel}: $curEx'
+                                                    : '🟢 ${AppStrings.trainingNowLabel}')
+                                                : AppStrings.inactiveNowLabel,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isTraining
+                                                  ? Colors.greenAccent
+                                                  : Colors.grey,
+                                              fontWeight: isTraining
+                                                  ? FontWeight.w600
+                                                  : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    OutlinedButton(
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => ProfileScreen(
+                                              currentUserId: widget.currentUserId,
+                                              profileUserId: memberId,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      child: const Text(AppStrings.viewProfileBtn),
+                                    ),
+                                  ],
+                                ),
+                                if (bio.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    bio,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  children: [
+                                    Chip(
+                                      visualDensity: VisualDensity.compact,
+                                      label: Text('🔥 $wStreak d gym'),
+                                    ),
+                                    Chip(
+                                      visualDensity: VisualDensity.compact,
+                                      label: Text('🥗 $dStreak d dieta'),
+                                    ),
+                                    Chip(
+                                      visualDensity: VisualDensity.compact,
+                                      label: Text('🏋️ $totalWorkouts sesiones'),
+                                    ),
+                                    Chip(
+                                      visualDensity: VisualDensity.compact,
+                                      label: Text(
+                                        '🏃 ${totalKm.toStringAsFixed(1)} km',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
 @override
 Widget build(BuildContext context) {
 final cs = Theme.of(context).colorScheme;
@@ -177,7 +430,26 @@ final String headerTitle = widget.isGroup
 return Scaffold(
 appBar: AppBar(
 titleSpacing: 0,
-title: Row(
+title: InkWell(
+borderRadius: BorderRadius.circular(12),
+onTap: () async {
+final snap = await FirebaseFirestore.instance
+.collection('chats')
+.doc(_chatId)
+.get();
+final data = snap.data() ?? {};
+final members = List<String>.from(
+data['users'] ??
+(widget.isGroup
+? [widget.currentUserId]
+: [widget.currentUserId, widget.chatPartnerId]),
+);
+if (!mounted) return;
+_showParticipantsActivitySheet(members);
+},
+child: Padding(
+padding: const EdgeInsets.symmetric(vertical: 4),
+child: Row(
 children: [
 Container(
 width: 36,
@@ -206,14 +478,37 @@ fontWeight: FontWeight.bold,
 ),
 const SizedBox(width: 10),
 Expanded(
-child: Text(
+child: Column(
+crossAxisAlignment: CrossAxisAlignment.start,
+mainAxisSize: MainAxisSize.min,
+children: [
+Text(
 headerTitle,
 overflow: TextOverflow.ellipsis,
-style: const TextStyle(fontSize: 18),
+style: const TextStyle(fontSize: 17),
+),
+Text(
+AppStrings.tapHeaderForDetailsHint,
+overflow: TextOverflow.ellipsis,
+style: TextStyle(
+fontSize: 11,
+color: cs.onSurfaceVariant,
 ),
 ),
 ],
 ),
+),
+],
+),
+),
+),
+actions: [
+IconButton(
+tooltip: AppStrings.quickTrainToggleTooltip,
+icon: const Icon(Icons.fitness_center),
+onPressed: _openQuickTrainingDialog,
+),
+],
 ),
 body: Column(
 children: [
@@ -258,6 +553,63 @@ color: cs.outlineVariant.withValues(alpha: 0.4),
 child: Column(
 crossAxisAlignment: CrossAxisAlignment.start,
 children: [
+if (widget.isGroup) ...[
+Wrap(
+spacing: 6,
+runSpacing: 4,
+children: users.map((u) {
+return ActionChip(
+visualDensity: VisualDensity.compact,
+avatar: const Icon(Icons.person, size: 14),
+label: Text(
+u == widget.currentUserId ? '$u (Tú)' : u,
+style: const TextStyle(fontSize: 11.5),
+),
+onPressed: () => _showParticipantsActivitySheet(users),
+);
+}).toList(),
+),
+const SizedBox(height: 6),
+],
+// Estado en vivo de Modo Entrenamiento de los integrantes
+Column(
+crossAxisAlignment: CrossAxisAlignment.start,
+children: users.map((memberId) {
+return StreamBuilder<DocumentSnapshot>(
+stream: FirebaseFirestore.instance
+.collection('users')
+.doc(memberId)
+.snapshots(),
+builder: (context, uSnap) {
+final uData = (uSnap.data?.data() as Map<String, dynamic>?) ?? {};
+if (uData['isTraining'] != true) return const SizedBox.shrink();
+final ex = (uData['currentExercise'] ?? '').toString();
+return Padding(
+padding: const EdgeInsets.only(bottom: 4),
+child: Row(
+children: [
+const Icon(Icons.fitness_center, size: 14, color: Colors.greenAccent),
+const SizedBox(width: 6),
+Expanded(
+child: Text(
+ex.isNotEmpty
+? '🟢 $memberId • ${AppStrings.trainingNowLabel}: $ex'
+: '🟢 $memberId • ${AppStrings.trainingNowLabel}',
+style: const TextStyle(
+fontSize: 12,
+fontWeight: FontWeight.w600,
+color: Colors.greenAccent,
+),
+overflow: TextOverflow.ellipsis,
+),
+),
+],
+),
+);
+},
+);
+}).toList(),
+),
 Row(
 children: [
 Expanded(
@@ -481,8 +833,67 @@ onPressed: _openSharedActionSheet,
 ),
 const SizedBox(width: 8),
 Expanded(
-child: TextField(
+child: StatefulBuilder(
+builder: (context, setInputState) {
+final match = RegExp(r'(?:^|\s)@([a-zA-Z0-9_.-]*)$')
+.firstMatch(_messageController.text);
+final query = match?.group(1)?.toLowerCase();
+
+return Column(
+mainAxisSize: MainAxisSize.min,
+crossAxisAlignment: CrossAxisAlignment.start,
+children: [
+if (query != null)
+FutureBuilder<DocumentSnapshot>(
+future: FirebaseFirestore.instance
+.collection('chats')
+.doc(_chatId)
+.get(),
+builder: (context, snap) {
+final data =
+(snap.data?.data() as Map<String, dynamic>?) ?? {};
+final members = List<String>.from(
+data['users'] ??
+(widget.isGroup
+? [widget.currentUserId]
+: [widget.currentUserId, widget.chatPartnerId]),
+);
+final filtered = members
+.where((u) =>
+u != widget.currentUserId &&
+!u.startsWith('Invitado_') &&
+u.toLowerCase().contains(query))
+.toList();
+if (filtered.isEmpty) return const SizedBox.shrink();
+return Padding(
+padding: const EdgeInsets.only(bottom: 6),
+child: Wrap(
+spacing: 6,
+children: filtered.map((u) {
+return ActionChip(
+visualDensity: VisualDensity.compact,
+label: Text('@$u'),
+onPressed: () {
+final updated = _messageController.text.replaceFirst(
+RegExp(r'@([a-zA-Z0-9_.-]*)$'),
+'@$u ',
+);
+_messageController.value = TextEditingValue(
+text: updated,
+selection:
+TextSelection.collapsed(offset: updated.length),
+);
+setInputState(() {});
+},
+);
+}).toList(),
+),
+);
+},
+),
+TextField(
 controller: _messageController,
+onChanged: (_) => setInputState(() {}),
 textInputAction: TextInputAction.send,
 onSubmitted: (_) => _sendMessage(),
 decoration: InputDecoration(
@@ -504,6 +915,10 @@ horizontal: 16,
 vertical: 10,
 ),
 ),
+),
+],
+);
+},
 ),
 ),
 const SizedBox(width: 8),

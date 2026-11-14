@@ -15,14 +15,34 @@ Future<void> _showCreateGroupDialog(BuildContext context) async {
 final nameController = TextEditingController();
 final Set<String> selectedUsers = {};
 
+final myDoc = await FirebaseFirestore.instance
+    .collection('users')
+    .doc(currentUserId)
+    .get();
+final myData = myDoc.data() ?? {};
+final myFollowing = Set<String>.from(myData['following'] ?? []);
+final myFollowers = Set<String>.from(myData['followers'] ?? []);
+
+// Solo amigos mutuos (los sigo y me siguen)
+final mutualIds = myFollowing.intersection(myFollowers);
+
 final usersSnap =
-await FirebaseFirestore.instance.collection('users').get();
+    await FirebaseFirestore.instance.collection('users').get();
 final allUsernames = usersSnap.docs
-.map((d) => (d.data()['username'] ?? d.id).toString())
-.where((u) => u.isNotEmpty && u != currentUserId)
-.toSet()
-.toList()
-..sort();
+    .where((d) {
+      final data = d.data();
+      final uname = (data['username'] ?? d.id).toString();
+      final isAnon =
+          data['isAnonymous'] == true || uname.startsWith('Invitado_');
+      return !isAnon &&
+          uname.isNotEmpty &&
+          uname != currentUserId &&
+          (mutualIds.contains(uname) || mutualIds.contains(d.id));
+    })
+    .map((d) => (d.data()['username'] ?? d.id).toString())
+    .toSet()
+    .toList()
+  ..sort();
 
 if (!context.mounted) return;
 

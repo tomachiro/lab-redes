@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+match /databases/{database}/documents {
+
+function isSignedIn() {
+return request.auth != null;
+}
+
+function isNotAnonymous() {
+return isSignedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous';
+}
+
+// Perfiles de usuario
+match /users/{username} {
+allow read: if isSignedIn();
+allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+allow update: if isSignedIn() && (
+resource.data.uid == request.auth.uid ||
+// Permitir actualizar únicamente seguidores/seguidos al seguir a otro usuario
+request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'following'])
+);
+allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+
+// Notificaciones personales
+match /notifications/{notifId} {
+allow read, update, delete: if isSignedIn() && get(/databases/$(database)/documents/users/$(username)).data.uid == request.auth.uid;
+allow create: if isNotAnonymous();
+}
+}
+
+// Publicaciones (bloqueado escribir para usuarios anónimos)
+match /posts/{postId} {
+allow read: if isSignedIn();
+allow create: if isNotAnonymous();
+allow update: if isNotAnonymous() && (
+resource.data.uid == request.auth.uid ||
+request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentsCount'])
+);
+allow delete: if isNotAnonymous() && resource.data.uid == request.auth.uid;
+
+match /comments/{commentId} {
+allow read: if isSignedIn();
+allow create: if isNotAnonymous();
+allow delete: if isNotAnonymous() && resource.data.uid == request.auth.uid;
+}
+}
+
+// Chats directos y grupales (bloqueado para anónimos)
+match /chats/{chatId} {
+allow read, write: if isNotAnonymous();
+match /messages/{msgId} {
+allow read, write: if isNotAnonymous();
+}
+}
+}
+}

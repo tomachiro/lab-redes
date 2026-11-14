@@ -1,3 +1,6 @@
+import '../services/mention_service.dart';
+import 'package:image_picker/image_picker.dart';
+import '../utils/media_helper.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -336,8 +339,75 @@ return;
                     ],
                     if (postId == null) ...[
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: mediaUrlController,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.photo_library, size: 18),
+                              label: const Text(AppStrings.pickFromGalleryBtn),
+                              onPressed: () async {
+                                final encoded = await MediaHelper.pickAndEncodeImage(
+                                  source: ImageSource.gallery,
+                                );
+                                if (encoded == null) return;
+                                if (encoded == 'TOO_LARGE') {
+if (!mounted) return;
+ScaffoldMessenger.of(context).showSnackBar(
+const SnackBar(
+content: Text(AppStrings.photoTooLargeError),
+),
+);
+return;
+}
+setStateDialog(() {
+mediaUrlController.text = encoded;
+mediaType = 'image';
+});
+},
+),
+),
+const SizedBox(width: 8),
+OutlinedButton.icon(
+icon: const Icon(Icons.camera_alt, size: 18),
+label: const Text(AppStrings.takePhotoBtn),
+onPressed: () async {
+final encoded = await MediaHelper.pickAndEncodeImage(
+source: ImageSource.camera,
+);
+if (encoded == null || encoded == 'TOO_LARGE') return;
+setStateDialog(() {
+mediaUrlController.text = encoded;
+mediaType = 'image';
+});
+},
+),
+],
+),
+if (mediaUrlController.text.startsWith('data:image'))
+Padding(
+padding: const EdgeInsets.only(top: 6, bottom: 4),
+child: Row(
+children: [
+const Icon(Icons.check_circle, color: Colors.green, size: 16),
+const SizedBox(width: 6),
+const Expanded(
+child: Text(
+AppStrings.photoAttachedBadge,
+style: TextStyle(fontSize: 12, color: Colors.green),
+),
+),
+IconButton(
+icon: const Icon(Icons.close, size: 16),
+onPressed: () => setStateDialog(() {
+mediaUrlController.clear();
+}),
+),
+],
+),
+),
+const SizedBox(height: 8),
+TextField(
+controller: mediaUrlController,
                         decoration: const InputDecoration(
                           labelText: AppStrings.mediaUrlLabel,
                           border: OutlineInputBorder(),
@@ -416,6 +486,7 @@ setStateDialog(() => tempHours = val),
                           .collection('posts')
                           .doc(postId)
                           .update({'content': text});
+await MentionService.notifyMentions(fromUser: widget.currentUserId, text: text, contextLabel: "en una publicación", postId: postId);
                     } else {
                       const collection = 'posts';
                       final mediaUrl = mediaUrlController.text.trim();
@@ -440,9 +511,7 @@ setStateDialog(() => tempHours = val),
                             );
                       }
 
-                      await FirebaseFirestore.instance
-                          .collection(collection)
-                          .add({
+                      final createdPostRef = await FirebaseFirestore.instance.collection(collection).add({
                             'author': widget.currentUserId,
                             'content': text,
                             'category': category,
@@ -468,7 +537,8 @@ DateTime.now().add(Duration(hours: tempHours ?? 0)),
                           });
 
                       // Actualizar racha diaria (Ejercicio o Dieta) si es un post normal
-                      if (!widget.isAnonymous) {
+                      await MentionService.notifyMentions(fromUser: widget.currentUserId, text: text, contextLabel: "en una publicación", postId: createdPostRef.id);
+if (!widget.isAnonymous) {
                         await StreakService.registerActivity(
                           username: widget.currentUserId,
                           category: category,
@@ -555,36 +625,81 @@ DateTime.now().add(Duration(hours: tempHours ?? 0)),
                   },
                 ),
               ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: commentController,
-                      decoration: const InputDecoration(
-                        hintText: AppStrings.commentHint,
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
+              if (widget.isAnonymous || widget.currentUserId.startsWith("Invitado_"))
+  const Padding(
+    padding: EdgeInsets.symmetric(vertical: 8),
+    child: Text(AppStrings.anonCommentRestrictedHint, style: TextStyle(fontSize: 12, color: Colors.grey)),
+  )
+else
+  StatefulBuilder(
+    builder: (context, setCommentState) {
+      final cMatch = RegExp(r"(?:^|\s)@([a-zA-Z0-9_.-]*)$").firstMatch(commentController.text);
+      final cQuery = cMatch?.group(1)?.toLowerCase();
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (cQuery != null)
+            FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance.collection("users").doc(widget.currentUserId).get(),
+              builder: (context, snap) {
+                if (!snap.hasData) return const SizedBox.shrink();
+                final myData = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+                final following = List<String>.from(myData["following"] ?? []);
+                final matches = following
+                    .where((u) => u != widget.currentUserId && !u.startsWith("Invitado_") && u.toLowerCase().contains(cQuery))
+                    .take(5)
+                    .toList();
+                if (matches.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Wrap(
+                    spacing: 6,
+                    children: matches.map((uname) {
+                      return ActionChip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text("@$uname"),
+                        onPressed: () {
+                          final updated = commentController.text.replaceFirst(RegExp(r"@([a-zA-Z0-9_.-]*)$"), "@$uname ");
+                          commentController.value = TextEditingValue(text: updated, selection: TextSelection.collapsed(offset: updated.length));
+                          setCommentState(() {});
+                        },
+                      );
+                    }).toList(),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: () async {
-                      final text = commentController.text.trim();
-                      if (text.isEmpty) return;
-                      commentController.clear();
-                      await FirebaseFirestore.instance
-                          .collection('posts')
-                          .doc(postId)
-                          .collection('comments')
-                          .add({
-                            'author': widget.currentUserId,
-                            'text': text,
-                            'createdAt': FieldValue.serverTimestamp(),
-                          });
-                    },
-                  ),
-                ],
+                );
+              },
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: commentController,
+                  onChanged: (_) => setCommentState(() {}),
+                  decoration: const InputDecoration(hintText: AppStrings.commentHint, border: OutlineInputBorder()),
+                ),
               ),
+      IconButton(
+        icon: const Icon(Icons.send),
+        onPressed: () async {
+          final text = commentController.text.trim();
+          if (text.isEmpty) return;
+          commentController.clear();
+          await FirebaseFirestore.instance.collection("posts").doc(postId).collection("comments").add({
+            "author": widget.currentUserId,
+            "text": text,
+            "createdAt": FieldValue.serverTimestamp(),
+          });
+              await MentionService.notifyMentions(fromUser: widget.currentUserId, text: text, contextLabel: "en un comentario", postId: postId);
+              setCommentState(() {});
+            },
+          ),
+        ],
+      ),
+    ],
+  );
+},
+),
               const SizedBox(height: 12),
             ],
           ),
@@ -592,6 +707,245 @@ DateTime.now().add(Duration(hours: tempHours ?? 0)),
       },
     );
   }
+
+
+  void _showLeaderboardSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.72,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Icon(Icons.emoji_events, color: Colors.amber),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        AppStrings.leaderboardTitle,
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (!widget.isAnonymous)
+                StreamBuilder<DocumentSnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(widget.currentUserId)
+                      .snapshots(),
+                  builder: (context, meSnap) {
+                    final meData =
+                        (meSnap.data?.data() as Map<String, dynamic>?) ?? {};
+                    final participating =
+                        meData['participateInLeaderboard'] == true;
+                    return SwitchListTile(
+                      title: const Text(
+                        AppStrings.participateLeaderboardLabel,
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      subtitle: const Text(
+                        AppStrings.participateLeaderboardSub,
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      value: participating,
+                      onChanged: (val) async {
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(widget.currentUserId)
+                            .set({
+                          'participateInLeaderboard': val,
+                        }, SetOptions(merge: true));
+                      },
+                    );
+                  },
+                ),
+              const Divider(height: 1),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .where('participateInLeaderboard', isEqualTo: true)
+                      .snapshots(),
+                  builder: (context, snap) {
+                    if (!snap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final docs = snap.data!.docs.where((d) {
+                      final data = d.data() as Map<String, dynamic>;
+                      return data['isAnonymous'] != true;
+                    }).toList();
+
+                    if (docs.isEmpty) {
+                      return const Center(
+                        child: Text(AppStrings.noLeaderboardParticipants),
+                      );
+                    }
+
+                    int calcScore(Map<String, dynamic> d) {
+                      final wStreak = (d['workoutStreak'] ?? 0) as int;
+                      final dStreak = (d['dietStreak'] ?? 0) as int;
+                      final workouts = (d['totalWorkouts'] ?? 0) as int;
+                      final km = ((d['totalKm'] ?? 0) as num).round();
+                      return (wStreak * 10) +
+                          (dStreak * 8) +
+                          (workouts * 5) +
+                          (km * 2);
+                    }
+
+                    docs.sort((a, b) {
+                      final da = a.data() as Map<String, dynamic>;
+                      final db = b.data() as Map<String, dynamic>;
+                      return calcScore(db).compareTo(calcScore(da));
+                    });
+
+                    final topDocs = docs.take(15).toList();
+                    return ListView.builder(
+                      itemCount: topDocs.length,
+                      itemBuilder: (context, i) {
+                        final data = topDocs[i].data() as Map<String, dynamic>;
+                        final name =
+                            (data['username'] ?? topDocs[i].id).toString();
+                        final score = calcScore(data);
+                        final wStreak = (data['workoutStreak'] ?? 0) as int;
+                        final km = ((data['totalKm'] ?? 0) as num).toDouble();
+                        final medal = i == 0
+                            ? '🥇'
+                            : (i == 1
+                                ? '🥈'
+                                : (i == 2 ? '🥉' : '#${i + 1}'));
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            child: Text(
+                              medal,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          title: Text(
+                            name,
+                            style: TextStyle(
+                              fontWeight: name == widget.currentUserId
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '🔥 $wStreak d • 🏃 ${km.toStringAsFixed(1)} km',
+                          ),
+                          trailing: Text(
+                            '$score pts',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber,
+                            ),
+                          ),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _navigateToProfile(name);
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+void _showNotificationsSheet() {
+showModalBottomSheet(
+context: context,
+isScrollControlled: true,
+builder: (ctx) => SafeArea(
+child: SizedBox(
+height: MediaQuery.of(ctx).size.height * 0.65,
+child: Column(
+children: [
+Padding(
+padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+child: Row(
+children: [
+const Icon(Icons.notifications),
+const SizedBox(width: 8),
+const Expanded(
+child: Text(
+AppStrings.notificationsTitle,
+style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+),
+),
+TextButton(
+onPressed: () async {
+final snap = await FirebaseFirestore.instance
+.collection('users')
+.doc(widget.currentUserId)
+.collection('notifications')
+.where('read', isEqualTo: false)
+.get();
+for (final doc in snap.docs) {
+await doc.reference.update({'read': true});
+}
+},
+child: const Text(AppStrings.markAllReadBtn),
+),
+],
+),
+),
+const Divider(height: 1),
+Expanded(
+child: StreamBuilder<QuerySnapshot>(
+stream: FirebaseFirestore.instance
+.collection('users')
+.doc(widget.currentUserId)
+.collection('notifications')
+.orderBy('createdAt', descending: true)
+.limit(30)
+.snapshots(),
+builder: (context, snap) {
+final docs = snap.data?.docs ?? [];
+if (docs.isEmpty) {
+return const Center(
+child: Text(AppStrings.noNotificationsYet),
+);
+}
+return ListView.builder(
+itemCount: docs.length,
+itemBuilder: (context, i) {
+final data = docs[i].data() as Map<String, dynamic>;
+final isRead = data['read'] == true;
+return ListTile(
+leading: Icon(
+Icons.notifications_active,
+color: isRead ? Colors.grey : Colors.amber,
+),
+title: Text(
+(data['text'] ?? '').toString(),
+style: TextStyle(
+fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
+),
+),
+onTap: () => docs[i].reference.update({'read': true}),
+);
+},
+);
+},
+),
+),
+],
+),
+),
+),
+);
+}
 
   void _navigateToProfile(String username) {
     Navigator.push(
@@ -984,8 +1338,8 @@ return true;
                                                 Icons.play_circle,
                                                 size: 50,
                                               )
-                                            : Image.network(
-                                                mediaUrl,
+                                            : SmartPostImage(
+url:                                                 mediaUrl,
                                                 errorBuilder: (
                                                   context,
                                                   error,
@@ -1004,8 +1358,12 @@ return true;
                                           color: isLiked ? Colors.red : null,
                                         ),
                                         onPressed: () async {
-                                          if (isLiked) {
-                                            likes.remove(widget.currentUserId);
+if (widget.isAnonymous || widget.currentUserId.startsWith("Invitado_")) {
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(AppStrings.anonCannotLikeOrComment)));
+  return;
+}
+if (isLiked) {
+  likes.remove(widget.currentUserId);
                                           } else {
                                             likes.add(widget.currentUserId);
                                           }
@@ -1064,6 +1422,34 @@ SizedBox(width: 8),
 Text(AppStrings.appName),
 ],
 ),
+actions: [
+          IconButton(
+            tooltip: AppStrings.openRankingTooltip,
+            onPressed: _showLeaderboardSheet,
+            icon: const Icon(Icons.emoji_events_outlined, color: Colors.amber),
+          ),
+if (!widget.isAnonymous)
+StreamBuilder<QuerySnapshot>(
+stream: FirebaseFirestore.instance
+.collection('users')
+.doc(widget.currentUserId)
+.collection('notifications')
+.where('read', isEqualTo: false)
+.snapshots(),
+builder: (context, snap) {
+final unread = snap.data?.docs.length ?? 0;
+return IconButton(
+tooltip: AppStrings.notificationsTitle,
+onPressed: _showNotificationsSheet,
+icon: Badge(
+isLabelVisible: unread > 0,
+label: Text('$unread'),
+child: const Icon(Icons.notifications_outlined),
+),
+);
+},
+),
+],
 ),
 body: pages[_currentIndex],
       floatingActionButton: (_currentIndex == 0 && !widget.isAnonymous)

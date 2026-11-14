@@ -195,4 +195,113 @@ static const String passwordsDoNotMatchError =
 'Las contraseñas no coinciden';
 static const String usernameAlreadyExistsError =
 'Ese nombre de usuario ya está en uso';
+
+  // Rutina semanal (7 días)
+  static const String weeklyRoutineTitle = 'Rutina Semanal (7 Días)';
+static const String weeklyRoutineSubtitle = 'Toca un día para ver o editar la rutina';
+static const List<String> weekDaysShort = [
+'Lun',
+'Mar',
+'Mié',
+'Jue',
+'Vie',
+'Sáb',
+'Dom',
+];
+static const List<String> weekDaysFull = [
+'Lunes',
+'Martes',
+'Miércoles',
+'Jueves',
+'Viernes',
+'Sábado',
+'Domingo',
+];
+static const String restDayLabel = 'Día de descanso / Recuperación';
+static const String editDayRoutineTitle = 'Editar rutina del día';
+static const String dayFocusHint = 'Enfoque (ej. Pecho y Tríceps, Pierna, Descanso)';
+static const String dayExercisesHint = 'Ejercicios y series (uno por línea)...';
+static const String noExercisesRegistered = 'Sin ejercicios detallados para este día.';
+
+// Modo Entrenamiento en vivo y temporizadores
+static const String liveWorkoutTitle = 'Modo Entrenamiento';
+static const String liveWorkoutActiveBadge = 'ENTRENANDO AHORA';
+static const String liveWorkoutInactiveSub = 'Actívalo para mostrar qué entrenas y usar temporizadores';
+static const String currentExerciseLabel = 'Ejercicio actual';
+static const String currentExerciseHint = 'Ej. Press Banca, Sentadillas, Trote 5K...';
+static const String updateExerciseBtn = 'Actualizar';
+static const String restTimerTitle = 'Descanso entre series';
+static const String waterTimerTitle = 'Recordatorio de agua';
+static const String drinkWaterAlert = '💧 ¡Hora de tomar agua! Mantente hidratado.';
+static const String restFinishedAlert = '⏱️ ¡Tiempo de descanso terminado! Siguiente serie.';
+static const String finishWorkoutBtn = 'Finalizar entrenamiento';
+static const String publishWorkoutPromptTitle = '¿Publicar entrenamiento?';
+static const String publishWorkoutPromptBody =
+'¿Quieres compartir tu sesión como una publicación temporal (24h) en el feed?';
+static const String publishAsTemp24hBtn = 'Publicar temporal (24h)';
+static const String justFinishBtn = 'Solo finalizar';
+
+// Logros, PRs y Evolución
+static const String achievementsAndPrsTitle = 'Logros, PRs y Evolución';
+static const String totalKmLabel = 'Km Totales';
+static const String totalWorkoutsLabel = 'Sesiones';
+static const String addCustomPrBtn = 'Registrar PR / Ejercicio';
+static const String exerciseNameLabel = 'Nombre del ejercicio';
+static const String exerciseNameHint = 'Ej. Press Banca, Dominadas, Carrera 10K...';
+static const String prValueLabel = 'Marca / Récord (kg, reps o km)';
+static const String prValueHint = 'Ej. 100 kg, 15 reps, 10.5 km';
+static const String prNotesLabel = 'Notas o evolución (opcional)';
+static const String noPrsYet = 'Aún no hay récords personales registrados.';
+
+// Subida de fotos sin servidor externo (Base64 optimizado)
+static const String pickFromGalleryBtn = 'Subir foto (Galería)';
+static const String takePhotoBtn = 'Cámara';
+static const String photoAttachedBadge = 'Foto adjunta lista para publicar';
+static const String photoTooLargeError = 'La imagen es demasiado pesada, intenta con otra.';
+
+// Feed filtrado y notificaciones
+static const String feedExploreTab = 'Explorar';
+static const String feedFollowingTab = 'Siguiendo';
+static const String noFollowingPosts = 'Aún no hay publicaciones de las personas que sigues.';
+static const String notificationsTitle = 'Notificaciones';
+static const String noNotificationsYet = 'No tienes notificaciones nuevas.';
+static const String markAllReadBtn = 'Marcar leídas';
+
+  // Ranking / Mejores de la aplicación (Opt-in)
+  static const String leaderboardTitle = 'Mejores de Gym-Book (Ranking)';
+static const String participateLeaderboardLabel = 'Participar en el ranking';
+static const String participateLeaderboardSub =
+'Muestra tu progreso en la tabla global de la comunidad';
+static const String noLeaderboardParticipants =
+'Aún no hay atletas inscritos en el ranking.';
+static const String followingFilterChip = 'Siguiendo';
+
+  // Acceso directo al ranking y detalles en chats
+  static const String openRankingTooltip = 'Ver ranking de mejores atletas';
+static const String groupNameRequiredError = 'Debes ingresar un nombre para el grupo';
+static const String groupMembersRequiredError = 'Selecciona al menos un integrante';
+static const String tapHeaderForDetailsHint = 'Toca aquí para ver actividad y perfiles';
+static const String chatActivitySummaryTitle = 'Actividad y Resumen';
+static const String groupParticipantsTitle = 'Integrantes del grupo';
+static const String viewProfileBtn = 'Ver perfil';
+static const String trainingNowLabel = 'Entrenando ahora';
+static const String inactiveNowLabel = 'Sin entrenamiento activo';
+static const String quickTrainToggleTooltip = 'Activar / editar mi modo entrenamiento';
+
+  // Foto y Video de Perfil en Firestore
+  static const String pickAvatarPhotoBtn = 'Foto galería';
+static const String takeAvatarPhotoBtn = 'Cámara';
+static const String pickAvatarVideoBtn = 'Video (máx 6s)';
+static const String avatarVideoTooLargeError =
+'El video supera 650 KB. Graba uno más corto (3-5 s) o en menor resolución.';
+static const String avatarMediaReadyBadge =
+'Multimedia de perfil lista para guardar';
+static const String tapAvatarToChangeHint = 'Toca el avatar para cambiar foto o video';
+
+// Menciones @ y restricción de incógnitos
+static const String anonCannotLikeOrComment =
+'Inicia sesión con una cuenta para dar me gusta o comentar';
+static const String anonCommentRestrictedHint =
+'Los perfiles incógnito solo pueden leer comentarios';
+static const String mentionSuggestionTitle = 'Mencionar usuario:';
 }

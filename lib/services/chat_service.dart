@@ -1,3 +1,4 @@
+import 'mention_service.dart';
 import '../utils/app_strings.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -94,6 +95,13 @@ await _db
 'activityCategory': ?activityCategory,
 'timestamp': timestamp,
 });
+
+await MentionService.notifyMentions(
+fromUser: senderId,
+text: message,
+contextLabel: 'en un chat',
+chatId: resolvedChatId,
+);
 }
 
 /// Registra el cumplimiento diario de ejercicio o dieta en el chat
@@ -157,9 +165,15 @@ newLastDate = today;
 final String label = isWorkout
 ? AppStrings.workoutCheckinLog
 : AppStrings.dietCheckinLog;
-final String fullMsg = (detail != null && detail.trim().isNotEmpty)
+final bool isGroupChat = data['isGroup'] == true || users.length > 2;
+final otherMembers = users.where((u) => u != senderId).toList();
+final autoTags = (isGroupChat && otherMembers.isNotEmpty)
+? ' ${otherMembers.map((u) => '@$u').join(' ')}'
+: '';
+final baseMsg = (detail != null && detail.trim().isNotEmpty)
 ? '$label: ${detail.trim()}'
 : label;
+final String fullMsg = '$baseMsg$autoTags';
 
 tx.set(
 chatRef,
@@ -186,6 +200,18 @@ tx.set(msgRef, {
 'timestamp': FieldValue.serverTimestamp(),
 });
 });
+
+final updatedSnap = await chatRef.get();
+final updatedData = updatedSnap.data() ?? {};
+final lastMsg = (updatedData['lastMessage'] ?? '').toString();
+if (lastMsg.contains('@')) {
+await MentionService.notifyMentions(
+fromUser: senderId,
+text: lastMsg,
+contextLabel: 'en un ejercicio grupal',
+chatId: chatId,
+);
+}
 }
 
 /// Calcula la racha efectiva actual del chat (0 si se rompió ayer)
