@@ -17,7 +17,7 @@ await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 final prefs = await SharedPreferences.getInstance();
 final String? savedUser = prefs.getString('current_user');
 final bool isAnon = prefs.getBool('is_anonymous') ?? false;
-String themeMode = prefs.getString('theme_mode') ?? 'light';
+String themeMode = prefs.getString('theme_mode') ?? 'dark';
 
 // Respaldo desde Firestore por si Flutter Web cambia de puerto al recargar
 if (savedUser != null && !isAnon) {
