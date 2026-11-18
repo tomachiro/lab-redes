@@ -1,1 +1,37 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"lab-red-app","appId":"1:661258637673:android:54e8fcb4bdc6f33e0eadf8","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"lab-red-app","configurations":{"android":"1:661258637673:android:54e8fcb4bdc6f33e0eadf8","ios":"1:661258637673:ios:2c9056121637c8da0eadf8","web":"1:661258637673:web:39f078807b6e4bc50eadf8"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "lab-red-app",
+          "appId": "1:661258637673:android:54e8fcb4bdc6f33e0eadf8",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "lab-red-app",
+          "configurations": {
+            "android": "1:661258637673:android:54e8fcb4bdc6f33e0eadf8",
+            "ios": "1:661258637673:ios:2c9056121637c8da0eadf8",
+            "web": "1:661258637673:web:39f078807b6e4bc50eadf8"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
